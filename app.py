@@ -21,27 +21,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# STANDAR & THRESHOLD CONSTANTS - ISO 10816-3
+# STANDAR & THRESHOLD CONSTANTS - ISO 10816-3 (RESMI SESUAI DOKUMEN)
 # ==============================================================================
-
-# ISO 10816-3 Vibration Severity (mm/s RMS) - Based on Group & Foundation
-# Foundation Type affects limits (Rigid = tighter limits)
+# Group 1: >300 kW (Large) | Group 2: 15-300 kW Rigid | Group 3: 15-300 kW Flexible | Group 4: <15 kW (Small)
 ISO_10816_THRESHOLDS = {
-    'Group 1': {  # <15 kW - ISO 10816-1
-        'Rigid': {'A': 1.8, 'B': 4.5, 'C': 7.1},
-        'Flexible': {'A': 2.8, 'B': 7.1, 'C': 11.2}
-    },
-    'Group 2': {  # 15-300 kW - ISO 10816-3 Tables 2 (Rigid) & 3 (Flexible)
-        'Rigid': {'A': 1.8, 'B': 2.8, 'C': 4.5},
-        'Flexible': {'A': 2.8, 'B': 4.5, 'C': 7.1}
-    },
-    'Group 3': {  # >300 kW - ISO 10816-3 Table 1 (Rigid) + Industry Practice (Flexible)
+    'Group 1': {  # >300 kW - ISO 10816-3 Table 1 (Large Machines)
         'Rigid': {'A': 2.8, 'B': 4.5, 'C': 7.1},
         'Flexible': {'A': 4.5, 'B': 7.1, 'C': 11.2}
     },
-    'Group 4': {  # Turbo Machinery - ISO 10816-2
-        'Rigid': {'A': 1.12, 'B': 2.8, 'C': 4.5},
-        'Flexible': {'A': 1.8, 'B': 4.5, 'C': 7.1}
+    'Group 2': {  # 15-300 kW - ISO 10816-3 Table 2 (Medium Machines, Rigid Foundation)
+        'Rigid': {'A': 1.8, 'B': 2.8, 'C': 4.5},
+        'Flexible': {'A': 2.8, 'B': 4.5, 'C': 7.1}
+    },
+    'Group 3': {  # 15-300 kW - ISO 10816-3 Table 3 (Medium Machines, Flexible Foundation)
+        'Rigid': {'A': 2.8, 'B': 4.5, 'C': 7.1},
+        'Flexible': {'A': 2.8, 'B': 4.5, 'C': 7.1}
+    },
+    'Group 4': {  # <15 kW - ISO 10816-1 (Small Machines)
+        'Rigid': {'A': 1.8, 'B': 4.5, 'C': 7.1},
+        'Flexible': {'A': 2.8, 'B': 7.1, 'C': 11.2}
     }
 }
 
@@ -76,10 +74,6 @@ ACC_LIMITS = {
 # ==============================================================================
 
 def get_iso_severity(group, foundation, velocity_rms):
-    """
-    Menghitung Severity berdasarkan ISO 10816-3 dengan Group & Foundation Type.
-    Returns: Zone, Color, Limit, Standard Name, Severity Level
-    """
     thresholds = ISO_10816_THRESHOLDS[group][foundation]
     
     if velocity_rms < thresholds['A']:
@@ -102,10 +96,6 @@ def get_api_610_status(velocity_rms):
         return "🚨 Trip Required", "🔴", API_610_LIMITS['Trip'], "critical"
 
 def diagnose_fault(h, v, a, total_v):
-    """
-    Mendiagnosa jenis fault berdasarkan rasio arah getaran (H/V/A).
-    Returns: fault_type, reason
-    """
     if total_v == 0:
         return None, None
     
@@ -117,15 +107,15 @@ def diagnose_fault(h, v, a, total_v):
     if ratio_a > 0.5:
         return "Misalignment", f"ISO 13373-1: Getaran Axial ({a:.2f} mm/s) > 50% total. Rasio Axial: {ratio_a:.1%}"
     
-    # 2. Angular Misalignment (Axial tinggi di satu sisi)
+    # 2. Angular Misalignment
     if a > h and a > v and a > 2.0:
         return "Misalignment", f"ISO 13373-1: Getaran Axial ({a:.2f} mm/s) dominan dibanding Radial (H:{h:.2f}, V:{v:.2f})"
     
-    # 3. Unbalance (Dominan Radial) - ISO 13373-1
+    # 3. Unbalance (Dominan Radial)
     if ratio_a < 0.3 and (ratio_v > 0.35 or ratio_h > 0.35):
         return "Unbalance", f"ISO 13373-1: Getaran Radial (H:{h:.2f}, V:{v:.2f}) dominan. Axial rendah ({ratio_a:.1%})."
         
-    # 4. Looseness (Vertikal >> Horizontal) - ISO 13373-1
+    # 4. Looseness (Vertikal >> Horizontal)
     if v > 1.5 * h and v > 2.0:
         return "Mechanical Looseness", f"ISO 13373-1: Getaran Vertikal ({v:.2f}) > 1.5x Horizontal ({h:.2f}). Indikasi fondasi/bearing loose."
     
@@ -195,17 +185,12 @@ def check_electrical(v_r, v_s, v_t, i_r, i_s, i_t, fla, rated_voltage):
     return "⚠️ " + ", ".join(issues), "; ".join(recommendations), standards, "warning"
 
 def check_hydraulic(suction_p, discharge_p, flow_q, head_h, actual_rpm, rated_rpm):
-    """
-    Cek Hidrolik berdasarkan API 610 dengan parameter Q, H, dan RPM.
-    """
     delta_p = discharge_p - suction_p
     issues = []
     recommendations = []
     
-    # Convert head (m) to pressure (bar) for comparison: 1 bar ≈ 10.2 m head
     head_pressure_bar = head_h / 10.2 if head_h > 0 else 0
     
-    # Cavitation Check (NPSH related)
     if suction_p < 1.0 and discharge_p > 2.0:
         issues.append("Risk of Cavitation")
         recommendations.append("Suction pressure <1 bar. Cek NPSH Available vs Required (API 610).")
@@ -213,12 +198,10 @@ def check_hydraulic(suction_p, discharge_p, flow_q, head_h, actual_rpm, rated_rp
         issues.append("Critical Suction Pressure")
         recommendations.append("Suction sangat rendah. Risiko kavitasi parah.")
     
-    # Low Head Check
     if delta_p < 1.0 and discharge_p > 0:
         issues.append("Low Differential Pressure")
         recommendations.append("Delta P rendah. Cek impeller wear atau valve position.")
     
-    # Flow Rate Check (BEP - Best Efficiency Point)
     if flow_q > 0 and head_h > 0:
         if delta_p > 0:
             efficiency_indicator = (delta_p / head_pressure_bar) * 100 if head_pressure_bar > 0 else 0
@@ -226,7 +209,6 @@ def check_hydraulic(suction_p, discharge_p, flow_q, head_h, actual_rpm, rated_rp
                 issues.append("Off-BEP Operation")
                 recommendations.append("Operasi jauh dari BEP. Cek flow rate dan system curve.")
     
-    # RPM Deviation Check
     if rated_rpm > 0 and actual_rpm > 0:
         rpm_deviation = abs(actual_rpm - rated_rpm) / rated_rpm * 100
         if rpm_deviation > 5:
@@ -259,7 +241,7 @@ with st.expander("📋 1. Machine Specifications (Klik untuk Isi)", expanded=Tru
     with col_spec2:
         st.markdown("**ISO 10816-3 Classification**")
         machine_group = st.selectbox("Machine Group", ["Group 1", "Group 2", "Group 3", "Group 4"], 
-                                     help="Group 1: <15kW, Group 2: 15-75kW, Group 3: >75kW, Group 4: Turbo")
+                                     help="Group 1: >300kW, Group 2: 15-300kW (Rigid), Group 3: 15-300kW (Flexible), Group 4: <15kW")
         foundation_type = st.selectbox("Foundation Type", ["Rigid", "Flexible"],
                                        help="Rigid: Concrete base, Flexible: Steel structure")
         pump_standard = st.selectbox("Pump Standard", ["API 610 / ISO 13709", "ISO 10816-3 General"])
@@ -274,7 +256,6 @@ with st.expander("📋 1. Machine Specifications (Klik untuk Isi)", expanded=Tru
         flow_q = st.number_input("Flow Rate Q (m³/h)", min_value=0.0, value=0.0)
         head_h = st.number_input("Head H (m)", min_value=0.0, value=0.0)
     
-    # Display calculated thresholds
     st.divider()
     col_info1, col_info2 = st.columns(2)
     with col_info1:
@@ -286,7 +267,7 @@ with st.expander("📋 1. Machine Specifications (Klik untuk Isi)", expanded=Tru
         - Zone A: < {threshold_a} mm/s
         - Zone B: {threshold_a} - {threshold_b} mm/s
         - Zone C: {threshold_b} - {threshold_c} mm/s
-        - Zone D: > {threshold_c} mm/s
+        - Zone D: ≥ {threshold_c} mm/s
         """)
     with col_info2:
         st.info(f"""
@@ -417,29 +398,38 @@ if st.button("🚀 RUN DIAGNOSTIC ENGINE", type="primary"):
                 st.caption(f"📜 *Standard: {standard_name}*")
                 st.caption(f"*H: {data['h']}, V: {data['v']}, A: {data['a']} mm/s*")
                 
-     # Tampilkan fault diagnosis HANYA jika severity di atas normal
-     if severity_level == "critical" or temp_level == "critical":
-    # KRUSIAL: Selalu laporkan vibration kritis meskipun tidak ada pola spesifik
-    if severity_level == "critical":
-        if fault:
-            st.error(f"**⚠️ Fault Detected:** {fault}")
-            st.caption(f"🔍 *Diagnosis Basis:* {reason}")
-            final_report.append(f"{b_name}: {fault} ({zone})")
-        else:
-            # GENERIC CRITICAL VIBRATION MESSAGE
-            st.error(f"**🚨 CRITICAL VIBRATION:** {zone} (Exceeds Limit)")
-            st.caption(f"🔍 *Vibration {total_v:.2f} mm/s > Limit {limit} mm/s per {standard_name}*")
-            final_report.append(f"{b_name}: CRITICAL VIBRATION ({zone}) - Requires Immediate Investigation")
-            # Tambahkan ke detected_faults untuk trigger rekomendasi
-            if "High Vibration" not in detected_faults:
-                detected_faults.append("High Vibration")
-    
-    if temp_level == "critical":
-        st.error(f"**🌡️ Temp Status:** {temp_stat}")
-        st.caption(f"🔍 *Temp Basis:* {temp_reason}")
-        # Hindari duplikat jika sudah ditambahkan karena vibration kritis
-        if severity_level != "critical" or not fault:
-            final_report.append(f"{b_name}: Temp {temp_stat}")
+                # KRUSIAL: Selalu laporkan vibration kritis meskipun tidak ada pola spesifik
+                if severity_level == "critical":
+                    if fault:
+                        st.error(f"**⚠️ Fault Detected:** {fault}")
+                        st.caption(f"🔍 *Diagnosis Basis:* {reason}")
+                        final_report.append(f"{b_name}: {fault} ({zone})")
+                    else:
+                        st.error(f"**🚨 CRITICAL VIBRATION:** {zone}")
+                        st.caption(f"🔍 *Vibration {total_v:.2f} mm/s ≥ Limit {limit} mm/s per {standard_name}*")
+                        final_report.append(f"{b_name}: CRITICAL VIBRATION ({zone}) - Requires Immediate Investigation")
+                        if "High Vibration" not in detected_faults:
+                            detected_faults.append("High Vibration")
+                
+                if temp_level == "critical":
+                    st.error(f"**🌡️ Temp Status:** {temp_stat}")
+                    st.caption(f"🔍 *Temp Basis:* {temp_reason}")
+                    # Hindari duplikat jika sudah ditambahkan karena vibration kritis tanpa fault
+                    if not (severity_level == "critical" and not fault):
+                        final_report.append(f"{b_name}: Temp {temp_stat}")
+                elif temp_level == "warning" and severity_level != "critical":
+                    st.warning(f"**🌡️ Temp Status:** {temp_stat}")
+                    st.caption(f"🔍 *Temp Basis:* {temp_reason}")
+                    final_report.append(f"{b_name}: Temp {temp_stat}")
+                
+                if severity_level == "warning" and fault:
+                    st.warning(f"**⚠️ Attention:** {fault}")
+                    st.caption(f"🔍 *Diagnosis Basis:* {reason}")
+                    final_report.append(f"{b_name}: {fault} ({zone})")
+                
+                if severity_level == "normal" and temp_level == "normal":
+                    st.success(f"**✅ Status:** Normal")
+                    st.caption(f"🔍 *Vibration dalam batas acceptable per {standard_name}*")
 
     # 2. BEARING ACCELERATION
     st.subheader("2. Bearing Condition (Acceleration)")
@@ -537,6 +527,10 @@ if st.button("🚀 RUN DIAGNOSTIC ENGINE", type="primary"):
         if "Mechanical Looseness" in detected_faults:
             recommendations_shown.append("**Looseness:** Periksa fondasi, baseplate, dan mounting bolt. Kencangkan semua fastener.")
         
+        # KRUSIAL: Tambahkan rekomendasi untuk High Vibration
+        if "High Vibration" in detected_faults:
+            recommendations_shown.append("**🚨 CRITICAL VIBRATION:** Segera hentikan operasi. Lakukan inspeksi menyeluruh: alignment, balancing, kondisi bearing, dan fondasi. Jangan operasikan hingga penyebab diidentifikasi (ISO 10816-3 Clause 6.2).")
+        
         if "Bearing" in detected_faults:
             recommendations_shown.append("**Bearing Fault:** Ganti bearing dan cek lubrication schedule (ISO 12922).")
         
@@ -601,10 +595,12 @@ with st.sidebar:
     """)
     
     st.divider()
-    st.markdown("**Foundation Impact:**")
+    st.markdown("**Machine Group Reference:**")
     st.markdown("""
-    - **Rigid:** Concrete base, tighter limits
-    - **Flexible:** Steel structure, higher limits
+    - **Group 1:** >300 kW (Large Machines)
+    - **Group 2:** 15-300 kW (Rigid Foundation)
+    - **Group 3:** 15-300 kW (Flexible Foundation)
+    - **Group 4:** <15 kW (Small Machines)
     """)
     
     st.divider()
@@ -618,7 +614,7 @@ with st.sidebar:
     st.divider()
     st.markdown("**Catatan Penting:**")
     st.markdown("""
-    ISO 10816-3 adalah standar yang masih banyak digunakan di industri Indonesia untuk evaluasi getaran mesin industri umum. Standar ini menggantikan ISO 2372 dan memberikan panduan evaluasi berdasarkan:
+    ISO 10816-3:2009 adalah standar evaluasi getaran untuk mesin industri umum. Threshold disesuaikan berdasarkan:
     - Ukuran mesin (Group)
     - Jenis fondasi (Rigid/Flexible)
     - Lokasi pengukuran (bearing housing)
