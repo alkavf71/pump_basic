@@ -419,14 +419,27 @@ if st.button("🚀 RUN DIAGNOSTIC ENGINE", type="primary"):
                 
                 # Tampilkan fault diagnosis HANYA jika severity di atas normal
                 if severity_level == "critical" or temp_level == "critical":
+                # KRUSIAL: Selalu laporkan vibration kritis meskipun tidak ada pola spesifik
+                if severity_level == "critical":
                     if fault:
                         st.error(f"**⚠️ Fault Detected:** {fault}")
                         st.caption(f"🔍 *Diagnosis Basis:* {reason}")
                         final_report.append(f"{b_name}: {fault} ({zone})")
-                    if temp_level == "critical":
-                        st.error(f"**🌡️ Temp Status:** {temp_stat}")
-                        st.caption(f"🔍 *Temp Basis:* {temp_reason}")
-                        final_report.append(f"{b_name}: Temp {temp_stat}")
+                    else:
+                        # GENERIC CRITICAL VIBRATION MESSAGE
+                        st.error(f"**🚨 CRITICAL VIBRATION:** {zone} (Exceeds Limit)")
+                        st.caption(f"🔍 *Vibration {total_v:.2f} mm/s > Limit {limit} mm/s per {standard_name}*")
+                        final_report.append(f"{b_name}: CRITICAL VIBRATION ({zone}) - Requires Immediate Investigation")
+                        # Tambahkan ke detected_faults untuk trigger rekomendasi
+                        if "High Vibration" not in detected_faults:
+                            detected_faults.append("High Vibration")
+    
+    if temp_level == "critical":
+        st.error(f"**🌡️ Temp Status:** {temp_stat}")
+        st.caption(f"🔍 *Temp Basis:* {temp_reason}")
+        # Hindari duplikat jika sudah ditambahkan karena vibration kritis
+        if severity_level != "critical" or not fault:
+            final_report.append(f"{b_name}: Temp {temp_stat}")
                 elif severity_level == "warning" or temp_level == "warning":
                     if fault:
                         st.warning(f"**⚠️ Attention:** {fault}")
