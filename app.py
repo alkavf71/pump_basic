@@ -24,11 +24,25 @@ st.markdown("""
 # STANDAR & THRESHOLD CONSTANTS
 # ==============================================================================
 
-# ISO 20816-1 Vibration Severity (mm/s RMS)
+# ISO 20816-1 Vibration Severity (mm/s RMS) - Based on Group & Foundation
+# Foundation Type affects limits (Rigid = tighter limits)
 ISO_20816_THRESHOLDS = {
-    'Group 1': {'A': 1.4, 'B': 2.8, 'C': 4.5},
-    'Group 2': {'A': 1.8, 'B': 4.5, 'C': 7.1},
-    'Group 3': {'A': 2.3, 'B': 4.5, 'C': 11.2}
+    'Group 1': {
+        'Rigid': {'A': 1.1, 'B': 2.3, 'C': 3.5},
+        'Flexible': {'A': 1.4, 'B': 2.8, 'C': 4.5}
+    },
+    'Group 2': {
+        'Rigid': {'A': 1.4, 'B': 3.5, 'C': 5.6},
+        'Flexible': {'A': 1.8, 'B': 4.5, 'C': 7.1}
+    },
+    'Group 3': {
+        'Rigid': {'A': 1.8, 'B': 3.5, 'C': 8.9},
+        'Flexible': {'A': 2.3, 'B': 4.5, 'C': 11.2}
+    },
+    'Group 4': {
+        'Rigid': {'A': 2.3, 'B': 4.5, 'C': 11.2},
+        'Flexible': {'A': 2.8, 'B': 5.6, 'C': 14.0}
+    }
 }
 
 # API 610 / ISO 13709 Centrifugal Pump Specific Limits
@@ -61,26 +75,20 @@ ACC_LIMITS = {
 # FUNGSI HELPER & LOGIKA STANDAR
 # ==============================================================================
 
-def get_machine_group(power_kw):
-    if power_kw < 15:
-        return 'Group 1'
-    elif power_kw <= 75:
-        return 'Group 2'
-    else:
-        return 'Group 3'
-
-def get_iso_severity(power_kw, velocity_rms):
-    group = get_machine_group(power_kw)
-    thresholds = ISO_20816_THRESHOLDS[group]
+def get_iso_severity(group, foundation, velocity_rms):
+    """
+    Menghitung Severity berdasarkan ISO 20816-1 dengan Group & Foundation Type.
+    """
+    thresholds = ISO_20816_THRESHOLDS[group][foundation]
     
     if velocity_rms < thresholds['A']:
-        return "Zone A (Good)", "🟢", thresholds['A'], f"ISO 20816-1 ({group})", "normal"
+        return "Zone A (Good)", "🟢", thresholds['A'], f"ISO 20816-1 ({group}, {foundation})", "normal"
     elif velocity_rms < thresholds['B']:
-        return "Zone B (Satisfactory)", "🟡", thresholds['B'], f"ISO 20816-1 ({group})", "warning"
+        return "Zone B (Satisfactory)", "🟡", thresholds['B'], f"ISO 20816-1 ({group}, {foundation})", "warning"
     elif velocity_rms < thresholds['C']:
-        return "Zone C (Unsatisfactory)", "🟠", thresholds['C'], f"ISO 20816-1 ({group})", "critical"
+        return "Zone C (Unsatisfactory)", "🟠", thresholds['C'], f"ISO 20816-1 ({group}, {foundation})", "critical"
     else:
-        return "Zone D (Unacceptable)", "🔴", thresholds['C'], f"ISO 20816-1 ({group})", "critical"
+        return "Zone D (Unacceptable)", "🔴", thresholds['C'], f"ISO 20816-1 ({group}, {foundation})", "critical"
 
 def get_api_610_status(velocity_rms):
     if velocity_rms < API_610_LIMITS['Normal']:
@@ -94,7 +102,7 @@ def get_api_610_status(velocity_rms):
 
 def diagnose_fault(h, v, a, total_v):
     """
-    Mendiagnosa jenis fault berdasarkan rasio arah getaran.
+    Mendiagnosa jenis fault berdasarkan rasio arah getaran (H/V/A).
     Returns: fault_type, reason
     """
     if total_v == 0:
@@ -104,22 +112,28 @@ def diagnose_fault(h, v, a, total_v):
     ratio_v = v / total_v
     ratio_h = h / total_v
     
-    # 1. Misalignment (Dominan Axial)
-    if ratio_a > 0.5 or (a > h and a > v and a > 2.0):
+    # 1. Misalignment (Dominan Axial) - ISO 13373-1
+    if ratio_a > 0.5:
         return "Misalignment", f"ISO 13373-1: Getaran Axial ({a:.2f} mm/s) > 50% total. Rasio Axial: {ratio_a:.1%}"
     
-    # 2. Unbalance (Dominan Radial)
+    # 2. Angular Misalignment (Axial tinggi di satu sisi)
+    if a > h and a > v and a > 2.0:
+        return "Misalignment", f"ISO 13373-1: Getaran Axial ({a:.2f} mm/s) dominan dibanding Radial (H:{h:.2f}, V:{v:.2f})"
+    
+    # 3. Unbalance (Dominan Radial) - ISO 13373-1
     if ratio_a < 0.3 and (ratio_v > 0.35 or ratio_h > 0.35):
         return "Unbalance", f"ISO 13373-1: Getaran Radial (H:{h:.2f}, V:{v:.2f}) dominan. Axial rendah ({ratio_a:.1%})."
         
-    # 3. Looseness (Vertikal >> Horizontal)
+    # 4. Looseness (Vertikal >> Horizontal) - ISO 13373-1
     if v > 1.5 * h and v > 2.0:
         return "Mechanical Looseness", f"ISO 13373-1: Getaran Vertikal ({v:.2f}) > 1.5x Horizontal ({h:.2f}). Indikasi fondasi/bearing loose."
     
     return None, None
 
 def check_temperature(temp):
-    if temp < TEMP_LIMITS['Normal']:
+    if temp == 0:
+        return "⚪ No Data", "Tidak ada input temperatur.", "normal"
+    elif temp < TEMP_LIMITS['Normal']:
         return "🟢 Normal", f"Suhu bearing < {TEMP_LIMITS['Normal']}°C (ISO 12922).", "normal"
     elif temp < TEMP_LIMITS['Warning']:
         return "🟡 Warning", f"Suhu {temp}°C. Cek pelumasan ({TEMP_LIMITS['Normal']}-{TEMP_LIMITS['Warning']}°C).", "warning"
@@ -179,11 +193,18 @@ def check_electrical(v_r, v_s, v_t, i_r, i_s, i_t, fla, rated_voltage):
     
     return "⚠️ " + ", ".join(issues), "; ".join(recommendations), standards, "warning"
 
-def check_hydraulic(suction_p, discharge_p):
+def check_hydraulic(suction_p, discharge_p, flow_q, head_h, actual_rpm, rated_rpm):
+    """
+    Cek Hidrolik berdasarkan API 610 dengan parameter Q, H, dan RPM.
+    """
     delta_p = discharge_p - suction_p
     issues = []
     recommendations = []
     
+    # Convert head (m) to pressure (bar) for comparison: 1 bar ≈ 10.2 m head
+    head_pressure_bar = head_h / 10.2 if head_h > 0 else 0
+    
+    # Cavitation Check (NPSH related)
     if suction_p < 1.0 and discharge_p > 2.0:
         issues.append("Risk of Cavitation")
         recommendations.append("Suction pressure <1 bar. Cek NPSH Available vs Required (API 610).")
@@ -191,9 +212,26 @@ def check_hydraulic(suction_p, discharge_p):
         issues.append("Critical Suction Pressure")
         recommendations.append("Suction sangat rendah. Risiko kavitasi parah.")
     
+    # Low Head Check
     if delta_p < 1.0 and discharge_p > 0:
         issues.append("Low Differential Pressure")
         recommendations.append("Delta P rendah. Cek impeller wear atau valve position.")
+    
+    # Flow Rate Check (BEP - Best Efficiency Point)
+    if flow_q > 0 and head_h > 0:
+        # Check if operating near BEP (simplified check)
+        if delta_p > 0:
+            efficiency_indicator = (delta_p / head_pressure_bar) * 100 if head_pressure_bar > 0 else 0
+            if efficiency_indicator < 70:
+                issues.append("Off-BEP Operation")
+                recommendations.append("Operasi jauh dari BEP. Cek flow rate dan system curve.")
+    
+    # RPM Deviation Check
+    if rated_rpm > 0 and actual_rpm > 0:
+        rpm_deviation = abs(actual_rpm - rated_rpm) / rated_rpm * 100
+        if rpm_deviation > 5:
+            issues.append(f"RPM Deviation ({rpm_deviation:.1f}%)")
+            recommendations.append("RPM aktual menyimpang >5% dari rated. Cek VFD atau belt drive.")
         
     if not issues:
         return "✅ Normal Operation", "Parameter hidrolik normal.", "normal"
@@ -205,29 +243,66 @@ def check_hydraulic(suction_p, discharge_p):
 # ==============================================================================
 
 st.title("⚙️ Professional Motor Pump Diagnostic System")
-st.markdown("**Standar Referensi:** ISO 20816-1, ISO 13709 (API 610), IEC 60034-1, ISO 12922")
+st.markdown("**Standar Referensi:** ISO 20816-1, ISO 13709 (API 610), IEC 60034-1, ISO 12922, ISO 13373-1")
 
 # --- SIDEBAR / TOP: MACHINE SPECS ---
 with st.expander("📋 1. Machine Specifications (Klik untuk Isi)", expanded=True):
-    col_spec1, col_spec2, col_spec3 = st.columns(3)
+    col_spec1, col_spec2, col_spec3, col_spec4 = st.columns(4)
+    
     with col_spec1:
+        st.markdown("**Motor & Pump**")
         motor_kw = st.number_input("Motor Power (kW)", min_value=0.0, value=55.0)
         motor_rpm = st.number_input("Rated RPM", min_value=0, value=2900)
+        actual_rpm = st.number_input("Actual RPM", min_value=0, value=2900)
         coupling_type = st.selectbox("Coupling Type", ["Flexible", "Rigid"])
+    
     with col_spec2:
+        st.markdown("**ISO 20816 Classification**")
+        machine_group = st.selectbox("Machine Group", ["Group 1", "Group 2", "Group 3", "Group 4"], 
+                                     help="Group 1: <15kW, Group 2: 15-75kW, Group 3: >75kW, Group 4: Turbo")
+        foundation_type = st.selectbox("Foundation Type", ["Rigid", "Flexible"],
+                                       help="Rigid: Concrete base, Flexible: Steel structure")
         pump_standard = st.selectbox("Pump Standard", ["API 610 / ISO 13709", "ISO 20816 General"])
+    
+    with col_spec3:
+        st.markdown("**Electrical**")
         fla = st.number_input("Motor FLA (Amp)", min_value=0.0, value=100.0)
         rated_voltage = st.number_input("Rated Voltage (V)", min_value=0, value=380)
-    with col_spec3:
-        machine_group = get_machine_group(motor_kw)
-        st.info(f"**ISO 20816 Group:** {machine_group}\n\n**Threshold Zone A:** <{ISO_20816_THRESHOLDS[machine_group]['A']} mm/s")
+    
+    with col_spec4:
+        st.markdown("**Hydraulic**")
+        flow_q = st.number_input("Flow Rate Q (m³/h)", min_value=0.0, value=0.0)
+        head_h = st.number_input("Head H (m)", min_value=0.0, value=0.0)
+    
+    # Display calculated thresholds
+    st.divider()
+    col_info1, col_info2 = st.columns(2)
+    with col_info1:
+        threshold_a = ISO_20816_THRESHOLDS[machine_group][foundation_type]['A']
+        threshold_b = ISO_20816_THRESHOLDS[machine_group][foundation_type]['B']
+        threshold_c = ISO_20816_THRESHOLDS[machine_group][foundation_type]['C']
+        st.info(f"""
+        **📊 ISO 20816-1 Thresholds ({machine_group}, {foundation_type}):**
+        - Zone A: < {threshold_a} mm/s
+        - Zone B: {threshold_a} - {threshold_b} mm/s
+        - Zone C: {threshold_b} - {threshold_c} mm/s
+        - Zone D: > {threshold_c} mm/s
+        """)
+    with col_info2:
+        st.info(f"""
+        **🔧 Machine Info:**
+        - Rated RPM: {motor_rpm}
+        - Actual RPM: {actual_rpm}
+        - RPM Deviation: {abs(actual_rpm - motor_rpm) / motor_rpm * 100 if motor_rpm > 0 else 0:.1f}%
+        - Flow: {flow_q} m³/h | Head: {head_h} m
+        """)
 
 # --- MAIN INPUTS ---
 st.divider()
 
-# Row 1: Vibration & Temp
+# Row 1: Vibration & Temp (SEMUA BEARING MEMILIKI H/V/A)
 st.subheader("📊 2. Vibration Velocity & Temperature")
-st.caption("ISO 20816-1: Measurement on bearing housing in mm/s RMS")
+st.caption("ISO 20816-1: Measurement on bearing housing in mm/s RMS (H/V/A untuk semua bearing)")
 vib_cols = st.columns(4)
 bearings = ["Motor DE (B1)", "Motor NDE (B2)", "Pump DE (B3)", "Pump NDE (B4)"]
 vib_data = {}
@@ -236,11 +311,9 @@ temp_data = {}
 for i, b_name in enumerate(bearings):
     with vib_cols[i]:
         st.markdown(f"**{b_name}**")
-        has_axial = (i == 0 or i == 2)
-        
         h = st.number_input(f"H (mm/s)", key=f"h_{i}", min_value=0.0, step=0.01, value=0.0)
         v = st.number_input(f"V (mm/s)", key=f"v_{i}", min_value=0.0, step=0.01, value=0.0)
-        a = st.number_input(f"A (mm/s)", key=f"a_{i}", min_value=0.0, step=0.01, value=0.0) if has_axial else 0.0
+        a = st.number_input(f"A (mm/s)", key=f"a_{i}", min_value=0.0, step=0.01, value=0.0)
         temp = st.number_input(f"Temp (°C)", key=f"t_{i}", min_value=0.0, step=0.1, value=0.0)
         
         vib_data[b_name] = {'h': h, 'v': v, 'a': a, 'total': h+v+a}
@@ -281,11 +354,13 @@ with elec_col2:
 # Row 4: Hydraulic
 st.subheader("💧 5. Hydraulic Parameters")
 st.caption("API 610: Centrifugal Pumps for Petroleum Industries")
-hyd_col1, hyd_col2 = st.columns(2)
+hyd_col1, hyd_col2, hyd_col3 = st.columns(3)
 with hyd_col1:
     suction_p = st.number_input("Suction Pressure (bar)", min_value=0.0, value=0.0)
 with hyd_col2:
     discharge_p = st.number_input("Discharge Pressure (bar)", min_value=0.0, value=0.0)
+with hyd_col3:
+    st.metric("Differential Pressure", f"{discharge_p - suction_p:.2f} bar")
 
 # ==============================================================================
 # ANALYSIS & DASHBOARD
@@ -294,7 +369,7 @@ st.divider()
 if st.button("🚀 RUN DIAGNOSTIC ENGINE", type="primary"):
     
     final_report = []
-    detected_faults = []  # Track detected faults for dynamic recommendations
+    detected_faults = []
     st.header("📋 Diagnostic Report & Conclusion")
     
     # 1. MECHANICAL VIBRATION ANALYSIS
@@ -303,7 +378,7 @@ if st.button("🚀 RUN DIAGNOSTIC ENGINE", type="primary"):
     if pump_standard == "API 610 / ISO 13709":
         st.info("📜 **Standard Applied:** API 610 / ISO 13709 (Oil & Gas Industry - More Strict)")
     else:
-        st.info(f"📜 **Standard Applied:** ISO 20816-1 {get_machine_group(motor_kw)}")
+        st.info(f"📜 **Standard Applied:** ISO 20816-1 {machine_group} ({foundation_type} Foundation)")
     
     mech_grid = st.columns(2)
     
@@ -317,12 +392,12 @@ if st.button("🚀 RUN DIAGNOSTIC ENGINE", type="primary"):
             zone, color, limit, severity_level = get_api_610_status(total_v)
             standard_name = "API 610 / ISO 13709"
         else:
-            zone, color, limit, standard_name, severity_level = get_iso_severity(motor_kw, total_v)
+            zone, color, limit, standard_name, severity_level = get_iso_severity(machine_group, foundation_type, total_v)
         
         # Fault Diagnosis - HANYA jika severity level warning atau critical
         fault = None
         reason = None
-        if severity_level in ["warning", "critical"]:
+        if severity_level in ["warning", "critical"] and total_v > 0:
             fault, reason = diagnose_fault(data['h'], data['v'], data['a'], total_v)
             if fault:
                 detected_faults.append(fault)
@@ -340,6 +415,7 @@ if st.button("🚀 RUN DIAGNOSTIC ENGINE", type="primary"):
                 c2.metric("Temperature", f"{temp_data[b_name]}°C", delta=temp_stat.split()[0])
                 
                 st.caption(f"📜 *Standard: {standard_name}*")
+                st.caption(f"*H: {data['h']}, V: {data['v']}, A: {data['a']} mm/s*")
                 
                 # Tampilkan fault diagnosis HANYA jika severity di atas normal
                 if severity_level == "critical" or temp_level == "critical":
@@ -362,7 +438,7 @@ if st.button("🚀 RUN DIAGNOSTIC ENGINE", type="primary"):
                         final_report.append(f"{b_name}: Temp {temp_stat}")
                 else:
                     st.success(f"**✅ Status:** Normal")
-                    st.caption(f"🔍 *Vibration dalam batas acceptible per {standard_name}*")
+                    st.caption(f"🔍 *Vibration dalam batas acceptable per {standard_name}*")
 
     # 2. BEARING ACCELERATION
     st.subheader("2. Bearing Condition (Acceleration)")
@@ -419,10 +495,8 @@ if st.button("🚀 RUN DIAGNOSTIC ENGINE", type="primary"):
     # 4. HYDRAULIC
     st.subheader("4. Hydraulic Performance")
     st.caption("📜 *Standard: API 610 - NPSH & Differential Pressure*")
-    delta_p = discharge_p - suction_p
-    hyd_stat, hyd_rec, hyd_level = check_hydraulic(suction_p, discharge_p)
+    hyd_stat, hyd_rec, hyd_level = check_hydraulic(suction_p, discharge_p, flow_q, head_h, actual_rpm, motor_rpm)
     
-    st.metric("Differential Pressure", f"{delta_p:.2f} bar")
     if hyd_level == "warning":
         detected_faults.append("Hydraulic")
         st.warning(f"**{hyd_stat}**")
@@ -500,6 +574,7 @@ with st.sidebar:
     **Vibration:**
     - ISO 20816-1 (General)
     - API 610 / ISO 13709 (Pumps)
+    - ISO 13373-1 (Fault Diagnosis)
     
     **Electrical:**
     - IEC 60034-1
@@ -518,14 +593,21 @@ with st.sidebar:
     st.divider()
     st.markdown("**ISO 20816 Zones:**")
     st.markdown("""
-    - 🟢 Zone A: Good (<1.8 mm/s)
-    - 🟡 Zone B: Satisfactory (1.8-4.5 mm/s)
-    - 🟠 Zone C: Unsatisfactory (4.5-7.1 mm/s)
-    - 🔴 Zone D: Unacceptable (>7.1 mm/s)
+    - 🟢 Zone A: Good
+    - 🟡 Zone B: Satisfactory
+    - 🟠 Zone C: Unsatisfactory
+    - 🔴 Zone D: Unacceptable
     """)
     
     st.divider()
-    st.markdown("**Fault Diagnosis Logic:**")
+    st.markdown("**Foundation Impact:**")
+    st.markdown("""
+    - **Rigid:** Concrete base, tighter limits
+    - **Flexible:** Steel structure, higher limits
+    """)
+    
+    st.divider()
+    st.markdown("**Fault Diagnosis Logic (ISO 13373-1):**")
     st.markdown("""
     - **Misalignment:** Axial > 50% total
     - **Unbalance:** Radial dominant, Axial < 30%
