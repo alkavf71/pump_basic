@@ -28,20 +28,20 @@ st.markdown("""
 # Foundation Type affects limits (Rigid = tighter limits)
 ISO_10816_THRESHOLDS = {
     'Group 1': {
-        'Rigid': {'A': 1.1, 'B': 2.3, 'C': 3.5},
-        'Flexible': {'A': 1.4, 'B': 2.8, 'C': 4.5}
+        'Rigid': {'A': 0.28, 'B': 2.3, 'C': 4.5},
+        'Flexible': {'A': 0.28, 'B': 3.5, 'C': 7.1}
     },
     'Group 2': {
-        'Rigid': {'A': 1.4, 'B': 3.5, 'C': 5.6},
-        'Flexible': {'A': 1.8, 'B': 4.5, 'C': 7.1}
+        'Rigid': {'A': 0.28, 'B': 1.4, 'C': 2.8},
+        'Flexible': {'A': 0.28, 'B': 2.3, 'C': 4.5}
     },
     'Group 3': {
-        'Rigid': {'A': 1.8, 'B': 3.5, 'C': 8.9},
-        'Flexible': {'A': 2.3, 'B': 4.5, 'C': 11.2}
+        'Rigid': {'A': 0.28, 'B': 2.3, 'C': 4.5},
+        'Flexible': {'A': 0.28, 'B': 3.5, 'C': 7.1}
     },
     'Group 4': {
-        'Rigid': {'A': 2.3, 'B': 4.5, 'C': 11.2},
-        'Flexible': {'A': 2.8, 'B': 5.6, 'C': 14.0}
+        'Rigid': {'A': 0.28, 'B': 1.4, 'C': 2.8},
+        'Flexible': {'A': 0.28, 'B': 2.3, 'C': 4.5}
     }
 }
 
