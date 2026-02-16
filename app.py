@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 
 # Konfigurasi Halaman
-st.set_page_config(page_title="Professional Pump Diagnostic (ISO/API)", layout="wide", page_icon="⚙️")
+st.set_page_config(page_title="Professional Pump Diagnostic (ISO 10816-3)", layout="wide", page_icon="⚙️")
 
 # CSS Custom
 st.markdown("""
@@ -21,12 +21,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# STANDAR & THRESHOLD CONSTANTS
+# STANDAR & THRESHOLD CONSTANTS - ISO 10816-3
 # ==============================================================================
 
-# ISO 20816-1 Vibration Severity (mm/s RMS) - Based on Group & Foundation
+# ISO 10816-3 Vibration Severity (mm/s RMS) - Based on Group & Foundation
 # Foundation Type affects limits (Rigid = tighter limits)
-ISO_20816_THRESHOLDS = {
+ISO_10816_THRESHOLDS = {
     'Group 1': {
         'Rigid': {'A': 1.1, 'B': 2.3, 'C': 3.5},
         'Flexible': {'A': 1.4, 'B': 2.8, 'C': 4.5}
@@ -77,18 +77,19 @@ ACC_LIMITS = {
 
 def get_iso_severity(group, foundation, velocity_rms):
     """
-    Menghitung Severity berdasarkan ISO 20816-1 dengan Group & Foundation Type.
+    Menghitung Severity berdasarkan ISO 10816-3 dengan Group & Foundation Type.
+    Returns: Zone, Color, Limit, Standard Name, Severity Level
     """
-    thresholds = ISO_20816_THRESHOLDS[group][foundation]
+    thresholds = ISO_10816_THRESHOLDS[group][foundation]
     
     if velocity_rms < thresholds['A']:
-        return "Zone A (Good)", "🟢", thresholds['A'], f"ISO 20816-1 ({group}, {foundation})", "normal"
+        return "Zone A (Good)", "🟢", thresholds['A'], f"ISO 10816-3 ({group}, {foundation})", "normal"
     elif velocity_rms < thresholds['B']:
-        return "Zone B (Satisfactory)", "🟡", thresholds['B'], f"ISO 20816-1 ({group}, {foundation})", "warning"
+        return "Zone B (Satisfactory)", "🟡", thresholds['B'], f"ISO 10816-3 ({group}, {foundation})", "warning"
     elif velocity_rms < thresholds['C']:
-        return "Zone C (Unsatisfactory)", "🟠", thresholds['C'], f"ISO 20816-1 ({group}, {foundation})", "critical"
+        return "Zone C (Unsatisfactory)", "🟠", thresholds['C'], f"ISO 10816-3 ({group}, {foundation})", "critical"
     else:
-        return "Zone D (Unacceptable)", "🔴", thresholds['C'], f"ISO 20816-1 ({group}, {foundation})", "critical"
+        return "Zone D (Unacceptable)", "🔴", thresholds['C'], f"ISO 10816-3 ({group}, {foundation})", "critical"
 
 def get_api_610_status(velocity_rms):
     if velocity_rms < API_610_LIMITS['Normal']:
@@ -219,7 +220,6 @@ def check_hydraulic(suction_p, discharge_p, flow_q, head_h, actual_rpm, rated_rp
     
     # Flow Rate Check (BEP - Best Efficiency Point)
     if flow_q > 0 and head_h > 0:
-        # Check if operating near BEP (simplified check)
         if delta_p > 0:
             efficiency_indicator = (delta_p / head_pressure_bar) * 100 if head_pressure_bar > 0 else 0
             if efficiency_indicator < 70:
@@ -243,7 +243,7 @@ def check_hydraulic(suction_p, discharge_p, flow_q, head_h, actual_rpm, rated_rp
 # ==============================================================================
 
 st.title("⚙️ Professional Motor Pump Diagnostic System")
-st.markdown("**Standar Referensi:** ISO 20816-1, ISO 13709 (API 610), IEC 60034-1, ISO 12922, ISO 13373-1")
+st.markdown("**Standar Referensi:** ISO 10816-3, ISO 13709 (API 610), IEC 60034-1, ISO 12922, ISO 13373-1")
 
 # --- SIDEBAR / TOP: MACHINE SPECS ---
 with st.expander("📋 1. Machine Specifications (Klik untuk Isi)", expanded=True):
@@ -257,12 +257,12 @@ with st.expander("📋 1. Machine Specifications (Klik untuk Isi)", expanded=Tru
         coupling_type = st.selectbox("Coupling Type", ["Flexible", "Rigid"])
     
     with col_spec2:
-        st.markdown("**ISO 20816 Classification**")
+        st.markdown("**ISO 10816-3 Classification**")
         machine_group = st.selectbox("Machine Group", ["Group 1", "Group 2", "Group 3", "Group 4"], 
                                      help="Group 1: <15kW, Group 2: 15-75kW, Group 3: >75kW, Group 4: Turbo")
         foundation_type = st.selectbox("Foundation Type", ["Rigid", "Flexible"],
                                        help="Rigid: Concrete base, Flexible: Steel structure")
-        pump_standard = st.selectbox("Pump Standard", ["API 610 / ISO 13709", "ISO 20816 General"])
+        pump_standard = st.selectbox("Pump Standard", ["API 610 / ISO 13709", "ISO 10816-3 General"])
     
     with col_spec3:
         st.markdown("**Electrical**")
@@ -278,11 +278,11 @@ with st.expander("📋 1. Machine Specifications (Klik untuk Isi)", expanded=Tru
     st.divider()
     col_info1, col_info2 = st.columns(2)
     with col_info1:
-        threshold_a = ISO_20816_THRESHOLDS[machine_group][foundation_type]['A']
-        threshold_b = ISO_20816_THRESHOLDS[machine_group][foundation_type]['B']
-        threshold_c = ISO_20816_THRESHOLDS[machine_group][foundation_type]['C']
+        threshold_a = ISO_10816_THRESHOLDS[machine_group][foundation_type]['A']
+        threshold_b = ISO_10816_THRESHOLDS[machine_group][foundation_type]['B']
+        threshold_c = ISO_10816_THRESHOLDS[machine_group][foundation_type]['C']
         st.info(f"""
-        **📊 ISO 20816-1 Thresholds ({machine_group}, {foundation_type}):**
+        **📊 ISO 10816-3 Thresholds ({machine_group}, {foundation_type}):**
         - Zone A: < {threshold_a} mm/s
         - Zone B: {threshold_a} - {threshold_b} mm/s
         - Zone C: {threshold_b} - {threshold_c} mm/s
@@ -302,7 +302,7 @@ st.divider()
 
 # Row 1: Vibration & Temp (SEMUA BEARING MEMILIKI H/V/A)
 st.subheader("📊 2. Vibration Velocity & Temperature")
-st.caption("ISO 20816-1: Measurement on bearing housing in mm/s RMS (H/V/A untuk semua bearing)")
+st.caption("ISO 10816-3: Measurement on bearing housing in mm/s RMS (H/V/A untuk semua bearing)")
 vib_cols = st.columns(4)
 bearings = ["Motor DE (B1)", "Motor NDE (B2)", "Pump DE (B3)", "Pump NDE (B4)"]
 vib_data = {}
@@ -378,7 +378,7 @@ if st.button("🚀 RUN DIAGNOSTIC ENGINE", type="primary"):
     if pump_standard == "API 610 / ISO 13709":
         st.info("📜 **Standard Applied:** API 610 / ISO 13709 (Oil & Gas Industry - More Strict)")
     else:
-        st.info(f"📜 **Standard Applied:** ISO 20816-1 {machine_group} ({foundation_type} Foundation)")
+        st.info(f"📜 **Standard Applied:** ISO 10816-3 {machine_group} ({foundation_type} Foundation)")
     
     mech_grid = st.columns(2)
     
@@ -572,7 +572,7 @@ with st.sidebar:
     st.header("📚 Standard Reference")
     st.markdown("""
     **Vibration:**
-    - ISO 20816-1 (General)
+    - **ISO 10816-3** (General Industrial Machines)
     - API 610 / ISO 13709 (Pumps)
     - ISO 13373-1 (Fault Diagnosis)
     
@@ -591,7 +591,7 @@ with st.sidebar:
     """)
     
     st.divider()
-    st.markdown("**ISO 20816 Zones:**")
+    st.markdown("**ISO 10816-3 Zones:**")
     st.markdown("""
     - 🟢 Zone A: Good
     - 🟡 Zone B: Satisfactory
@@ -612,4 +612,13 @@ with st.sidebar:
     - **Misalignment:** Axial > 50% total
     - **Unbalance:** Radial dominant, Axial < 30%
     - **Looseness:** Vertical > 1.5x Horizontal
+    """)
+    
+    st.divider()
+    st.markdown("**Catatan Penting:**")
+    st.markdown("""
+    ISO 10816-3 adalah standar yang masih banyak digunakan di industri Indonesia untuk evaluasi getaran mesin industri umum. Standar ini menggantikan ISO 2372 dan memberikan panduan evaluasi berdasarkan:
+    - Ukuran mesin (Group)
+    - Jenis fondasi (Rigid/Flexible)
+    - Lokasi pengukuran (bearing housing)
     """)
