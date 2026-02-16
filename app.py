@@ -27,21 +27,21 @@ st.markdown("""
 # ISO 10816-3 Vibration Severity (mm/s RMS) - Based on Group & Foundation
 # Foundation Type affects limits (Rigid = tighter limits)
 ISO_10816_THRESHOLDS = {
-    'Group 1': {
-        'Rigid': {'A': 0.28, 'B': 2.3, 'C': 4.5},
-        'Flexible': {'A': 0.28, 'B': 3.5, 'C': 7.1}
+    'Group 1': {  # <15 kW - ISO 10816-1
+        'Rigid': {'A': 1.8, 'B': 4.5, 'C': 7.1},
+        'Flexible': {'A': 2.8, 'B': 7.1, 'C': 11.2}
     },
-    'Group 2': {
-        'Rigid': {'A': 0.28, 'B': 1.4, 'C': 2.8},
-        'Flexible': {'A': 0.28, 'B': 2.3, 'C': 4.5}
+    'Group 2': {  # 15-300 kW - ISO 10816-3 Tables 2 (Rigid) & 3 (Flexible)
+        'Rigid': {'A': 1.8, 'B': 2.8, 'C': 4.5},
+        'Flexible': {'A': 2.8, 'B': 4.5, 'C': 7.1}
     },
-    'Group 3': {
-        'Rigid': {'A': 0.28, 'B': 2.3, 'C': 4.5},
-        'Flexible': {'A': 0.28, 'B': 3.5, 'C': 7.1}
+    'Group 3': {  # >300 kW - ISO 10816-3 Table 1 (Rigid) + Industry Practice (Flexible)
+        'Rigid': {'A': 2.8, 'B': 4.5, 'C': 7.1},
+        'Flexible': {'A': 4.5, 'B': 7.1, 'C': 11.2}
     },
-    'Group 4': {
-        'Rigid': {'A': 0.28, 'B': 1.4, 'C': 2.8},
-        'Flexible': {'A': 0.28, 'B': 2.3, 'C': 4.5}
+    'Group 4': {  # Turbo Machinery - ISO 10816-2
+        'Rigid': {'A': 1.12, 'B': 2.8, 'C': 4.5},
+        'Flexible': {'A': 1.8, 'B': 4.5, 'C': 7.1}
     }
 }
 
